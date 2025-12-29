@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard EMG - Vida Nueva</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        window.initFirebase = function(apiKey, databaseURL) {
+            const app = initializeApp({ apiKey, databaseURL });
+            const db = getDatabase(app);
+            
+            // Escuchar el valor del EMG
+            onValue(ref(db, 'mano/emg_valor'), (snapshot) => {
+                const val = snapshot.val() || 0;
+                actualizarInterfaz(val);
+            });
+
+            // Escuchar el estado de la mano
+            onValue(ref(db, 'mano/estado'), (snapshot) => {
+                const estado = snapshot.val();
+                actualizarMano(estado);
+            });
+            
+            setDBStatus(true);
+        };
+    </script>
+
+    <style>
+        :root { --primario: #003366; --acento: #e67e22; --fondo: #f1f5f9; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--fondo); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .dashboard-container { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; width: 100%; max-width: 1100px; }
+        .card { background: white; border-radius: 24px; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border-top: 8px solid var(--primario); }
+        .db-status { display: inline-flex; align-items: center; gap: 8px; padding: 5px 15px; border-radius: 20px; font-size: 0.75rem; text-transform: uppercase; font-weight: bold; }
+        .online { background: #dcfce7; color: #15803d; }
+        .offline { background: #fee2e2; color: #b91c1c; }
+        .valor-num { font-size: 5rem; font-weight: 900; color: var(--primario); transition: all 0.2s; }
+        .mano-icon { font-size: 120px; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <div class="card flex flex-col">
+            <div class="flex justify-between items-start mb-4">
+                <div id="db-indicator" class="db-status offline">
+                    <span class="relative flex h-2 w-2">
+                        <span id="ping" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-red-500"></span>
+                        <span id="dot" class="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+                    </span>
+                    <span id="db-text">Desconectado</span>
+                </div>
+                <div class="text-right text-xs font-bold text-slate-400">
+                    <p id="fecha">--/--/----</p>
+                    <p id="hora">00:00:00</p>
+                </div>
+            </div>
+
+            <div class="institucion text-blue-900 font-extrabold">TECNOLÓGICO VIDA NUEVA</div>
+            <h1 class="text-3xl font-black text-orange-500 leading-tight">MANO ROBÓTICA<br>INTELIGENTE</h1>
+
+            <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 mt-6">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Equipo de Desarrollo:</p>
+                <div class="grid grid-cols-2 gap-2 text-xs font-bold text-slate-700">
+                    <span>• ALCACIEGA ALEX</span><span>• BARAHONA DAVID</span>
+                    <span>• CHUQUI ADONIS</span><span>• GUANOTASIG JOEL</span>
+                    <span>• NAVARRETE ALEXIS</span><span>• TOAQUIZA T.</span>
+                </div>
+            </div>
+
+            <button onclick="toggleModal(true)" class="mt-auto pt-8 flex items-center gap-2 mx-auto text-[10px] font-black text-slate-400 hover:text-blue-600 transition uppercase tracking-tighter">
+                <i data-lucide="settings-2" class="w-4 h-4"></i> Configurar Conexión Firebase
+            </button>
+        </div>
+
+        <div class="card text-center flex flex-col items-center">
+            <h2 class="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Lectura Sensor AD8832</h2>
+            
+            <div id="banner" class="w-full py-2 rounded-lg bg-slate-100 text-slate-500 font-black text-xs mb-6">ESPERANDO DATOS...</div>
+
+            <div class="mano-icon my-4" id="mano-box">
+                <i id="mano-i" class="fa-solid fa-hand-fist text-slate-200"></i>
+            </div>
+
+            <div class="relative">
+                <div class="valor-num" id="valor-display">0</div>
+                <div class="text-[10px] font-bold text-slate-400 uppercase">Unidades de Amplitud</div>
+            </div>
+
+            <div class="w-full mt-8 bg-slate-100 h-3 rounded-full overflow-hidden">
+                <div id="progress" class="bg-blue-600 h-full transition-all duration-200" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl">
+            <h2 class="text-2xl font-black text-slate-800 mb-2">Firebase</h2>
+            <p class="text-slate-500 text-sm mb-6">Ingresa las credenciales de tu base de datos Realtime.</p>
+            <input type="text" id="dbUrl" placeholder="https://tu-db.firebaseio.com/" class="w-full border-2 border-slate-100 rounded-xl p-3 mb-4 outline-none focus:border-blue-500 font-semibold">
+            <input type="password" id="apiKey" placeholder="API Key de Web" class="w-full border-2 border-slate-100 rounded-xl p-3 mb-6 outline-none focus:border-blue-500 font-semibold">
+            <button onclick="saveConfig()" class="w-full bg-blue-900 text-white font-black py-4 rounded-xl hover:bg-blue-800 transition">CONECTAR AHORA</button>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        function tick() {
+            const ahora = new Date();
+            document.getElementById('fecha').innerText = ahora.toLocaleDateString();
+            document.getElementById('hora').innerText = ahora.toLocaleTimeString();
+        }
+        setInterval(tick, 1000); tick();
+
+        function toggleModal(s) { document.getElementById('modal').classList.toggle('hidden', !s); }
+
+        function setDBStatus(online) {
+            const ind = document.getElementById('db-indicator');
+            ind.className = online ? "db-status online" : "db-status offline";
+            document.getElementById('db-text').innerText = online ? "Base de Datos: Online" : "Desconectado";
+            document.getElementById('ping').className = `animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${online?'bg-green-500':'bg-red-500'}`;
+            document.getElementById('dot').className = `relative inline-flex rounded-full h-2 w-2 ${online?'bg-green-600':'bg-red-600'}`;
+        }
+
+        function actualizarInterfaz(val) {
+            document.getElementById('valor-display').innerText = val;
+            const perc = Math.min((val / 100) * 100, 100); // Ajustado a escala EMG
+            document.getElementById('progress').style.width = perc + "%";
+        }
+
+        function actualizarMano(abierta) {
+            const icon = document.getElementById('mano-i');
+            const banner = document.getElementById('banner');
+            const box = document.getElementById('mano-box');
+
+            if(abierta) {
+                icon.className = "fa-solid fa-hand text-green-500";
+                banner.className = "w-full py-2 rounded-lg bg-green-500 text-white font-black text-xs mb-6";
+                banner.innerText = "MANO ABIERTA - CONTRACCIÓN";
+                box.style.transform = "scale(1.1)";
+            } else {
+                icon.className = "fa-solid fa-hand-fist text-slate-300";
+                banner.className = "w-full py-2 rounded-lg bg-slate-100 text-slate-500 font-black text-xs mb-6";
+                banner.innerText = "MANO CERRADA - REPOSO";
+                box.style.transform = "scale(1)";
+            }
+        }
+
+        function saveConfig() {
+            const url = document.getElementById('dbUrl').value;
+            const key = document.getElementById('apiKey').value;
+            if(url && key) {
+                localStorage.setItem('fb_url', url);
+                localStorage.setItem('fb_key', key);
+                window.initFirebase(key, url);
+                toggleModal(false);
+                Swal.fire('Conectado', 'Sincronizando con ESP32...', 'success');
+            }
+        }
+
+        // Auto-conectar si ya existen datos
+        window.onload = () => {
+            const url = localStorage.getItem('fb_url');
+            const key = localStorage.getItem('fb_key');
+            if(url && key) window.initFirebase(key, url);
+        };
+    </script>
+</body>
+</html>
